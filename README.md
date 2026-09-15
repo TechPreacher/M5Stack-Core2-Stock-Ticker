@@ -3,6 +3,8 @@ title: M5Stack Core2 Stock Ticker
 description: M5Stack Core2 firmware that displays three configurable stocks with five-trading-day graphs
 ---
 
+![M5Stack Core2 displaying the MSFT stock graph](media/app-screenshot.png)
+
 ## Features
 
 * Maps the three Core2 buttons to configurable stock symbols
