@@ -10,7 +10,9 @@ constexpr int ScreenHeight = 240;
 constexpr int GraphLeft = 14;
 constexpr int GraphTop = 100;
 constexpr int GraphWidth = 292;
-constexpr int GraphHeight = 112;
+constexpr int GraphHeight = 96;
+constexpr int ButtonBarTop = 218;
+constexpr int ButtonBarHeight = ScreenHeight - ButtonBarTop;
 constexpr std::uint16_t Background = 0x0841;
 constexpr std::uint16_t HeaderBackground = 0x18E3;
 constexpr std::uint16_t GridColor = 0x4208;
@@ -33,8 +35,10 @@ bool StockRenderer::begin() {
   return ready_;
 }
 
-void StockRenderer::render(const char* symbol, const stock::Series* series,
-                           const char* status, bool stale) {
+void StockRenderer::render(const char* symbol, const char* const* buttonSymbols,
+                           std::size_t buttonCount, std::size_t selectedButton,
+                           const stock::Series* series, const char* status,
+                           bool stale) {
   if (!ready_) {
     return;
   }
@@ -55,6 +59,7 @@ void StockRenderer::render(const char* symbol, const stock::Series* series,
   canvas_.setTextSize(1);
   canvas_.setTextColor(stale ? TFT_ORANGE : TFT_LIGHTGREY);
   canvas_.drawString(stale ? "STALE" : compactStatus, ScreenWidth - 10, 10);
+  drawSymbolLabels(buttonSymbols, buttonCount, selectedButton);
 
   if (series == nullptr || series->count == 0) {
     canvas_.setTextDatum(textdatum_t::middle_center);
@@ -105,10 +110,39 @@ void StockRenderer::render(const char* symbol, const stock::Series* series,
   std::snprintf(lastDate, sizeof(lastDate), "%.5s",
                 series->points[series->count - 1].timestamp + 5);
   canvas_.setTextDatum(textdatum_t::bottom_left);
-  canvas_.drawString(firstDate, GraphLeft, ScreenHeight - 5);
+  canvas_.drawString(firstDate, GraphLeft, ButtonBarTop - 3);
   canvas_.setTextDatum(textdatum_t::bottom_right);
-  canvas_.drawString(lastDate, GraphLeft + GraphWidth, ScreenHeight - 5);
+  canvas_.drawString(lastDate, GraphLeft + GraphWidth, ButtonBarTop - 3);
   canvas_.pushSprite(0, 0);
+}
+
+void StockRenderer::drawSymbolLabels(const char* const* symbols,
+                                     std::size_t symbolCount,
+                                     std::size_t selectedSymbol) {
+  if (symbols == nullptr || symbolCount == 0) {
+    return;
+  }
+
+  canvas_.drawFastHLine(0, ButtonBarTop, ScreenWidth, GridColor);
+  for (std::size_t index = 0; index < symbolCount; ++index) {
+    const int left = static_cast<int>((index * ScreenWidth) / symbolCount);
+    const int right = static_cast<int>(((index + 1) * ScreenWidth) / symbolCount);
+    if (index == selectedSymbol) {
+      canvas_.fillRect(left, ButtonBarTop + 1, right - left, ButtonBarHeight - 1,
+                       HeaderBackground);
+    }
+    if (index > 0) {
+      canvas_.drawFastVLine(left, ButtonBarTop + 1, ButtonBarHeight - 1, GridColor);
+    }
+
+    char label[13]{};
+    std::snprintf(label, sizeof(label), "%.12s", symbols[index]);
+    canvas_.setTextDatum(textdatum_t::middle_center);
+    canvas_.setTextSize(1);
+    canvas_.setTextColor(index == selectedSymbol ? TFT_WHITE : TFT_LIGHTGREY);
+    canvas_.drawString(label, (left + right) / 2,
+                       ButtonBarTop + ButtonBarHeight / 2);
+  }
 }
 
 void StockRenderer::drawGraph(const stock::Series& series, std::uint16_t color) {

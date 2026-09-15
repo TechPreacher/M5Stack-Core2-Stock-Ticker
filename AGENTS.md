@@ -1,6 +1,6 @@
 ---
-title: MS Stock Agent Guidelines
-description: Project-wide guidance for developing the M5Stack Core2 Microsoft stock display
+title: Stock Ticker Agent Guidelines
+description: Project-wide guidance for developing the M5Stack Core2 stock ticker
 ---
 
 ## Project State
@@ -15,8 +15,9 @@ description: Project-wide guidance for developing the M5Stack Core2 Microsoft st
 
 ## Product Contract
 
-* Display Microsoft stock (`MSFT`) with its current price and a one-week price
-  graph on the M5Stack Core2 screen.
+* Map the three Core2 buttons to three symbols configured in `settings.ini`.
+* Display the selected stock's current price and one-week price graph.
+* Show each configured symbol above its corresponding physical button.
 * Render the graph green when the price is up over the displayed period and red
   when it is down.
 * Connect to Wi-Fi using settings loaded from an INI file.
@@ -34,7 +35,8 @@ description: Project-wide guidance for developing the M5Stack Core2 Microsoft st
   one-week series transformation, and rendering so pure logic can be tested
   independently of hardware.
 * Design layouts for the Core2's 320 x 240 display. Reserve stable regions for
-  current price, connection/error state, axes, and graph to prevent redraw jitter.
+  current price, connection/error state, axes, graph, and button labels to
+  prevent redraw jitter.
 * Use HTTPS for market data. Bound response sizes, validate parsed values and
   timestamps, handle partial data, and preserve the last valid display when an
   update fails.

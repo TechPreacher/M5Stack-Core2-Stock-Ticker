@@ -17,13 +17,27 @@ constexpr std::uint32_t FailedFetchRetryMs = 60000;
 constexpr std::uint32_t FreeTierRefreshIntervalMs = 65UL * 60UL * 1000UL;
 constexpr std::uint32_t MarketTaskStackBytes = 32UL * 1024UL;
 
+static_assert(AppSettings::SymbolCount == 3, "Core2 requires three button symbols");
+
+struct MarketRequest {
+  std::size_t symbolIndex = 0;
+};
+
+struct MarketResponse {
+  std::size_t symbolIndex = 0;
+  FetchResult fetch{};
+};
+
 WifiController wifiController;
 StockRenderer renderer;
+QueueHandle_t requestQueue = nullptr;
 QueueHandle_t resultQueue = nullptr;
-TaskHandle_t marketTaskHandle = nullptr;
 stock::Series currentSeries{};
+std::size_t selectedSymbolIndex = 0;
+std::size_t fetchingSymbolIndex = 0;
 bool hasData = false;
 bool fetchInProgress = false;
+bool workerReady = false;
 bool clockRequested = false;
 bool clockReady = false;
 std::uint32_t clockRequestedAt = 0;
@@ -33,29 +47,75 @@ WifiState displayedWifiState = WifiState::WaitingToRetry;
 
 void marketTask(void*) {
   MarketDataClient client;
-  static FetchResult result{};
+  static MarketRequest request{};
+  static MarketResponse response{};
   while (true) {
-    ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-    result = client.fetch(AppSettings::Symbol, AppSettings::ApiKey);
-    xQueueOverwrite(resultQueue, &result);
+    if (xQueueReceive(requestQueue, &request, portMAX_DELAY) != pdTRUE ||
+        request.symbolIndex >= AppSettings::SymbolCount) {
+      continue;
+    }
+    response.symbolIndex = request.symbolIndex;
+    response.fetch =
+        client.fetch(AppSettings::Symbols[request.symbolIndex], AppSettings::ApiKey);
+    xQueueOverwrite(resultQueue, &response);
     Serial.printf("Market task stack minimum free: %u bytes\n",
                   static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
   }
 }
 
 void show(const char* status, bool stale = false) {
-  renderer.render(AppSettings::Symbol, hasData ? &currentSeries : nullptr, status,
-                  stale);
+  renderer.render(AppSettings::Symbols[selectedSymbolIndex], AppSettings::Symbols,
+                  AppSettings::SymbolCount, selectedSymbolIndex,
+                  hasData ? &currentSeries : nullptr, status, stale);
 }
 
 void startFetch() {
-  if (fetchInProgress || marketTaskHandle == nullptr) {
+  if (fetchInProgress || !workerReady) {
     return;
   }
+
+  const MarketRequest request{selectedSymbolIndex};
+  if (xQueueOverwrite(requestQueue, &request) != pdPASS) {
+    show("Worker unavailable", hasData);
+    return;
+  }
+  fetchingSymbolIndex = selectedSymbolIndex;
   fetchInProgress = true;
   lastFetchStartedAt = millis();
   show("Updating", hasData);
-  xTaskNotifyGive(marketTaskHandle);
+}
+
+void selectSymbol(std::size_t symbolIndex) {
+  if (symbolIndex >= AppSettings::SymbolCount) {
+    return;
+  }
+
+  const bool changed = symbolIndex != selectedSymbolIndex;
+  selectedSymbolIndex = symbolIndex;
+  if (changed) {
+    currentSeries = {};
+    hasData = false;
+    fetchIntervalMs = AppSettings::RefreshIntervalMs;
+  }
+
+  if (!clockReady) {
+    show(wifiController.state() == WifiState::Connected ? "Syncing clock"
+                                                        : "Waiting for Wi-Fi");
+  } else if (fetchInProgress) {
+    show(selectedSymbolIndex == fetchingSymbolIndex ? "Updating" : "Queued");
+  } else {
+    startFetch();
+  }
+}
+
+void handleSymbolButtons() {
+  if (M5.BtnA.wasClicked()) {
+    selectSymbol(0);
+  } else if (M5.BtnB.wasClicked()) {
+    selectSymbol(1);
+  } else if (M5.BtnC.wasClicked()) {
+    selectSymbol(2);
+  }
 }
 
 void updateWifiDisplay() {
@@ -113,12 +173,18 @@ void receiveMarketResult() {
     return;
   }
 
-  static FetchResult result{};
-  if (xQueueReceive(resultQueue, &result, 0) != pdTRUE) {
+  static MarketResponse response{};
+  if (xQueueReceive(resultQueue, &response, 0) != pdTRUE) {
     return;
   }
 
   fetchInProgress = false;
+  if (response.symbolIndex != selectedSymbolIndex) {
+    startFetch();
+    return;
+  }
+
+  const FetchResult& result = response.fetch;
   if (result.status == FetchStatus::Success) {
     currentSeries = result.series;
     hasData = true;
@@ -145,11 +211,13 @@ void setup() {
   renderer.begin();
   show("Starting");
 
-  resultQueue = xQueueCreate(1, sizeof(FetchResult));
-  if (resultQueue == nullptr ||
-      xTaskCreatePinnedToCore(marketTask, "market-data", MarketTaskStackBytes, nullptr, 1,
-                              &marketTaskHandle, 0) != pdPASS) {
-    marketTaskHandle = nullptr;
+  requestQueue = xQueueCreate(1, sizeof(MarketRequest));
+  resultQueue = xQueueCreate(1, sizeof(MarketResponse));
+  workerReady =
+      requestQueue != nullptr && resultQueue != nullptr &&
+      xTaskCreatePinnedToCore(marketTask, "market-data", MarketTaskStackBytes, nullptr,
+                              1, nullptr, 0) == pdPASS;
+  if (!workerReady) {
     show("Worker unavailable");
   }
 
@@ -160,14 +228,11 @@ void setup() {
 
 void loop() {
   M5.update();
+  handleSymbolButtons();
   wifiController.update();
   updateWifiDisplay();
   receiveMarketResult();
   updateClockAndFetch();
-
-  if (clockReady && !fetchInProgress && M5.BtnA.wasClicked()) {
-    startFetch();
-  }
   delay(5);
 }
 

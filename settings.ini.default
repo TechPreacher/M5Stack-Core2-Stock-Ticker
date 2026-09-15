@@ -4,5 +4,7 @@ password = your-wifi-password
 
 [market]
 api_key = your-alpha-vantage-api-key
-symbol = MSFT
+symbol_a = MSFT
+symbol_b = AAPL
+symbol_c = GOOGL
 refresh_minutes = 30
