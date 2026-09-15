@@ -1,0 +1,8 @@
+[wifi]
+ssid = your-wifi-name
+password = your-wifi-password
+
+[market]
+api_key = your-alpha-vantage-api-key
+symbol = MSFT
+refresh_minutes = 30
