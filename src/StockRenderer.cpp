@@ -37,28 +37,33 @@ bool StockRenderer::begin() {
 
 void StockRenderer::render(const char* symbol, const char* const* buttonSymbols,
                            std::size_t buttonCount, std::size_t selectedButton,
-                           const stock::Series* series, const char* status,
-                           bool stale) {
+                           bool wifiConnected, const stock::Series* series,
+                           const char* status, bool stale) {
   if (!ready_) {
     return;
   }
 
   char compactStatus[25]{};
+  char headerStatus[19]{};
   char detailStatus[47]{};
+  char headerSymbol[9]{};
   std::snprintf(compactStatus, sizeof(compactStatus), "%.24s", status);
+  std::snprintf(headerStatus, sizeof(headerStatus), "%.18s", status);
   std::snprintf(detailStatus, sizeof(detailStatus), "%.46s", status);
+  std::snprintf(headerSymbol, sizeof(headerSymbol), "%.8s", symbol);
 
   canvas_.fillSprite(Background);
   canvas_.fillRect(0, 0, ScreenWidth, 30, HeaderBackground);
   canvas_.setTextDatum(textdatum_t::top_left);
   canvas_.setTextColor(TFT_WHITE);
   canvas_.setTextSize(2);
-  canvas_.drawString(symbol, 12, 7);
+  canvas_.drawString(headerSymbol, 12, 7);
 
   canvas_.setTextDatum(textdatum_t::top_right);
   canvas_.setTextSize(1);
   canvas_.setTextColor(stale ? TFT_ORANGE : TFT_LIGHTGREY);
-  canvas_.drawString(stale ? "STALE" : compactStatus, ScreenWidth - 10, 10);
+  canvas_.drawString(stale ? "STALE" : headerStatus, ScreenWidth - 10, 10);
+  drawWifiStatus(wifiConnected);
   drawSymbolLabels(buttonSymbols, buttonCount, selectedButton);
 
   if (series == nullptr || series->count == 0) {
@@ -114,6 +119,28 @@ void StockRenderer::render(const char* symbol, const char* const* buttonSymbols,
   canvas_.setTextDatum(textdatum_t::bottom_right);
   canvas_.drawString(lastDate, GraphLeft + GraphWidth, ButtonBarTop - 3);
   canvas_.pushSprite(0, 0);
+}
+
+void StockRenderer::drawWifiStatus(bool connected) {
+  constexpr int CenterX = ScreenWidth / 2;
+  const std::uint16_t signalColor = connected ? TFT_GREEN : TFT_LIGHTGREY;
+
+  canvas_.drawLine(CenterX - 9, 11, CenterX - 6, 8, signalColor);
+  canvas_.drawLine(CenterX - 6, 8, CenterX - 3, 6, signalColor);
+  canvas_.drawLine(CenterX - 3, 6, CenterX, 5, signalColor);
+  canvas_.drawLine(CenterX, 5, CenterX + 3, 6, signalColor);
+  canvas_.drawLine(CenterX + 3, 6, CenterX + 6, 8, signalColor);
+  canvas_.drawLine(CenterX + 6, 8, CenterX + 9, 11, signalColor);
+  canvas_.drawLine(CenterX - 5, 14, CenterX - 2, 12, signalColor);
+  canvas_.drawLine(CenterX - 2, 12, CenterX, 11, signalColor);
+  canvas_.drawLine(CenterX, 11, CenterX + 2, 12, signalColor);
+  canvas_.drawLine(CenterX + 2, 12, CenterX + 5, 14, signalColor);
+  canvas_.fillCircle(CenterX, 18, 2, signalColor);
+
+  if (!connected) {
+    canvas_.drawLine(CenterX - 10, 5, CenterX + 10, 21, TFT_RED);
+    canvas_.drawLine(CenterX - 10, 6, CenterX + 10, 22, TFT_RED);
+  }
 }
 
 void StockRenderer::drawSymbolLabels(const char* const* symbols,

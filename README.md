@@ -7,6 +7,7 @@ description: M5Stack Core2 firmware that displays three configurable stocks with
 
 * Maps the three Core2 buttons to configurable stock symbols
 * Displays the selected symbol's latest hourly close and five-trading-day change
+* Shows Wi-Fi connection state in the top-center header icon
 * Draws green, red, or gray graph for rising, falling, or flat prices
 * Connects to Wi-Fi from a build-time INI file
 * Uses hourly Alpha Vantage data with premium keys

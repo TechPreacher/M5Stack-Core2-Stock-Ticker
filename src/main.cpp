@@ -66,6 +66,7 @@ void marketTask(void*) {
 void show(const char* status, bool stale = false) {
   renderer.render(AppSettings::Symbols[selectedSymbolIndex], AppSettings::Symbols,
                   AppSettings::SymbolCount, selectedSymbolIndex,
+                  wifiController.state() == WifiState::Connected,
                   hasData ? &currentSeries : nullptr, status, stale);
 }
 
