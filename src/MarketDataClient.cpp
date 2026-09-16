@@ -23,6 +23,25 @@ void setMessage(FetchResult& result, const char* message) {
   std::snprintf(result.message, sizeof(result.message), "%s", message);
 }
 
+void setApiError(FetchResult& result, const char* apiMessage) {
+  if (std::strstr(apiMessage, "We have detected your API key") != nullptr ||
+      std::strstr(apiMessage, "API call frequency") != nullptr ||
+      std::strstr(apiMessage, "rate limit") != nullptr) {
+    result.status = FetchStatus::RateLimited;
+    setMessage(result, "API daily limit");
+  } else if (std::strstr(apiMessage, "premium endpoint") != nullptr) {
+    result.status = FetchStatus::PremiumRequired;
+    setMessage(result, "Premium required");
+  } else if (std::strstr(apiMessage, "apikey") != nullptr ||
+             std::strstr(apiMessage, "API key") != nullptr) {
+    result.status = FetchStatus::ApiError;
+    setMessage(result, "Invalid API key");
+  } else {
+    result.status = FetchStatus::ApiError;
+    setMessage(result, "Market API error");
+  }
+}
+
 String urlEncode(const char* value) {
   String encoded;
   while (*value != '\0') {
@@ -96,24 +115,33 @@ bool parseClose(const char* text, float& value) {
 
 }  // namespace
 
-FetchResult MarketDataClient::fetch(const char* symbol, const char* apiKey) {
-  if (useDailyFallback_) {
-    return fetchInterval(symbol, apiKey, MarketInterval::Daily);
+MarketInterval preferredMarketInterval(stock::ChartPeriod period) {
+  return period == stock::ChartPeriod::Monthly ? MarketInterval::Daily
+                                                : MarketInterval::Hourly;
+}
+
+FetchResult MarketDataClient::fetch(const char* symbol, const char* apiKey,
+                                    stock::ChartPeriod period) {
+  const MarketInterval preferredInterval = preferredMarketInterval(period);
+  if (useDailyFallback_ || preferredInterval == MarketInterval::Daily) {
+    return fetchInterval(symbol, apiKey, MarketInterval::Daily, period);
   }
 
-  FetchResult result = fetchInterval(symbol, apiKey, MarketInterval::Hourly);
-  if (result.status == FetchStatus::ApiError &&
-      std::strstr(result.message, "premium endpoint") != nullptr) {
+  FetchResult result =
+      fetchInterval(symbol, apiKey, MarketInterval::Hourly, period);
+  if (result.status == FetchStatus::PremiumRequired) {
     useDailyFallback_ = true;
-    return fetchInterval(symbol, apiKey, MarketInterval::Daily);
+    return fetchInterval(symbol, apiKey, MarketInterval::Daily, period);
   }
   return result;
 }
 
 FetchResult MarketDataClient::fetchInterval(const char* symbol, const char* apiKey,
-                                            MarketInterval interval) const {
+                                            MarketInterval interval,
+                                            stock::ChartPeriod period) const {
   FetchResult result{};
   result.interval = interval;
+  result.period = period;
   WiFiClientSecure secureClient;
   secureClient.setCACert(certificates::GtsRootR4);
   secureClient.setTimeout(NetworkTimeoutMs / 1000U);
@@ -165,15 +193,17 @@ FetchResult MarketDataClient::fetchInterval(const char* symbol, const char* apiK
   }
   http.end();
 
-  result = parseMarketPayload(payload, payloadSize, interval);
+  result = parseMarketPayload(payload, payloadSize, interval, period);
   std::free(payload);
   return result;
 }
 
 FetchResult parseMarketPayload(char* payload, std::size_t payloadSize,
-                               MarketInterval interval) {
+                               MarketInterval interval,
+                               stock::ChartPeriod period) {
   FetchResult result{};
   result.interval = interval;
+  result.period = period;
   JsonDocument document;
   const DeserializationError parseError = deserializeJson(document, payload, payloadSize);
   if (parseError) {
@@ -185,8 +215,7 @@ FetchResult parseMarketPayload(char* payload, std::size_t payloadSize,
   for (const char* key : {"Information", "Note", "Error Message"}) {
     const char* apiMessage = document[key];
     if (apiMessage != nullptr) {
-      result.status = FetchStatus::ApiError;
-      setMessage(result, apiMessage);
+      setApiError(result, apiMessage);
       return result;
     }
   }
@@ -201,10 +230,15 @@ FetchResult parseMarketPayload(char* payload, std::size_t payloadSize,
     }
   }
 
-  stock::sortAndKeepLatestTradingDays(result.series, 5);
+  std::size_t tradingDays = stock::tradingDaysForPeriod(period);
+  if (interval == MarketInterval::Daily &&
+      period == stock::ChartPeriod::Daily) {
+    tradingDays = 2;
+  }
+  stock::sortAndKeepLatestTradingDays(result.series, tradingDays);
   if (result.series.count == 0) {
     result.status = FetchStatus::EmptySeries;
-    setMessage(result, "No valid hourly prices returned");
+    setMessage(result, "No valid prices returned");
     return result;
   }
 
