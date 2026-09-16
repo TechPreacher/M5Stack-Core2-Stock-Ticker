@@ -12,7 +12,7 @@ description: M5Stack Core2 firmware that displays three configurable stocks with
 * Shows Wi-Fi connection state in the top-center header icon
 * Shows battery percentage, low-battery state, and charging state in the top bar
 * Draws green, red, or gray graph for rising, falling, or flat prices
-* Connects to Wi-Fi from a build-time INI file
+* Loads Wi-Fi, API, and symbol settings from the microSD card at startup
 * Uses hourly Alpha Vantage data with premium keys
 * Falls back to five daily closes when key lacks intraday entitlement
 * Keeps last valid graph visible when Wi-Fi or API requests fail
@@ -22,12 +22,13 @@ description: M5Stack Core2 firmware that displays three configurable stocks with
 
 * PlatformIO
 * M5Stack Core2 connected over USB for upload and device tests
+* FAT-formatted microSD card
 * Alpha Vantage API key; premium access enables hourly data
 
 ## Configuration
 
-Copy [settings.ini.default](settings.ini.default) to `settings.ini`, then replace
-placeholder values:
+Copy [settings.ini.default](settings.ini.default) to a file named `settings.ini`
+in the root of a FAT-formatted microSD card, then replace placeholder values:
 
 ```ini
 [wifi]
@@ -46,9 +47,14 @@ refresh_minutes = 30
 Core2 buttons. Symbols are converted to uppercase and may contain up to 12
 letters, numbers, dots, or hyphens.
 
-`settings.ini` is ignored by Git. PlatformIO validates it and generates a header
-inside ignored `.pio` build output. Credentials are compiled into firmware, so
-anyone with physical flash access may be able to extract them.
+The settings file must be no larger than 2 KiB. Insert the card before powering
+on or resetting Core2. Firmware validates required values before starting Wi-Fi
+or market-data tasks. It shows `SD card missing` when no card can be mounted,
+`settings.ini missing` when the root file is absent, and a specific validation
+error when contents are invalid.
+
+Credentials remain on the removable card instead of being compiled into
+firmware. Protect the card because anyone with physical access can read them.
 
 ## Build And Upload
 
@@ -99,14 +105,14 @@ repository:
 git init
 ```
 
-Before publishing, confirm Git ignores the local credentials file:
+Before publishing, confirm Git ignores any local credentials copy:
 
 ```bash
 git check-ignore settings.ini
 ```
 
-The command must print `settings.ini`. Never commit `settings.ini` or files from
-the `.pio` build directory. Create the first commit:
+The command must print `settings.ini`. Never commit credentials copied from the
+SD card or files from the `.pio` build directory. Create the first commit:
 
 ```bash
 git add .

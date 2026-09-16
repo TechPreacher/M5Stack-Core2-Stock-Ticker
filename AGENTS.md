@@ -25,7 +25,9 @@ description: Project-wide guidance for developing the M5Stack Core2 stock ticker
   Fall back to daily closes and a quota-safe 65-minute refresh for free keys.
 * Use a five-trading-day window, USD, a 30-minute premium default refresh, and
   gray for flat data.
-* Read Wi-Fi and market settings from untracked `settings.ini` at build time.
+* Read Wi-Fi and market settings from `/settings.ini` on the inserted microSD
+  card at startup. Do not start networking when the card, file, or required
+  settings are missing.
 
 ## Design Constraints
 
@@ -41,7 +43,8 @@ description: Project-wide guidance for developing the M5Stack Core2 stock ticker
   timestamps, handle partial data, and preserve the last valid display when an
   update fails.
 * Keep Wi-Fi and API secrets out of tracked `platformio.ini`, source files, test
-  fixtures, serial logs, and commits. Store only a sanitized INI example in Git.
+  fixtures, serial logs, and commits. Store credentials only on the removable
+  microSD card and keep a sanitized INI example in Git.
 * Never log credentials or authorization headers. Reduce `CORE_DEBUG_LEVEL=5`
   before production use if logs could expose request details.
 
