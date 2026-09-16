@@ -15,6 +15,7 @@ constexpr time_t MinimumValidTime = 1704067200;
 constexpr std::uint32_t ClockWaitWarningMs = 20000;
 constexpr std::uint32_t FailedFetchRetryMs = 60000;
 constexpr std::uint32_t FreeTierRefreshIntervalMs = 65UL * 60UL * 1000UL;
+constexpr std::uint32_t BatteryRefreshIntervalMs = 10000;
 constexpr std::uint32_t MarketTaskStackBytes = 32UL * 1024UL;
 
 static_assert(AppSettings::SymbolCount == 3, "Core2 requires three button symbols");
@@ -42,8 +43,10 @@ bool clockRequested = false;
 bool clockReady = false;
 std::uint32_t clockRequestedAt = 0;
 std::uint32_t lastFetchStartedAt = 0;
+std::uint32_t lastBatteryRefreshAt = 0;
 std::uint32_t fetchIntervalMs = AppSettings::RefreshIntervalMs;
 WifiState displayedWifiState = WifiState::WaitingToRetry;
+bool batteryStatusInitialized = false;
 
 void marketTask(void*) {
   MarketDataClient client;
@@ -68,6 +71,20 @@ void show(const char* status, bool stale = false) {
                   AppSettings::SymbolCount, selectedSymbolIndex,
                   wifiController.state() == WifiState::Connected,
                   hasData ? &currentSeries : nullptr, status, stale);
+}
+
+void updateBatteryDisplay(bool force = false) {
+  const std::uint32_t now = millis();
+  if (!force && batteryStatusInitialized &&
+      now - lastBatteryRefreshAt < BatteryRefreshIntervalMs) {
+    return;
+  }
+
+  lastBatteryRefreshAt = now;
+  batteryStatusInitialized = true;
+  const bool charging =
+      M5.Power.isCharging() == m5::Power_Class::is_charging;
+  renderer.setBatteryStatus(M5.Power.getBatteryLevel(), charging);
 }
 
 void startFetch() {
@@ -191,7 +208,7 @@ void receiveMarketResult() {
     hasData = true;
     if (result.interval == MarketInterval::Daily) {
       fetchIntervalMs = max(AppSettings::RefreshIntervalMs, FreeTierRefreshIntervalMs);
-      show("Daily close", false);
+      show("5-day change", false);
     } else {
       fetchIntervalMs = AppSettings::RefreshIntervalMs;
       show("Hourly", false);
@@ -210,6 +227,7 @@ void setup() {
   auto config = M5.config();
   M5.begin(config);
   renderer.begin();
+  updateBatteryDisplay(true);
   show("Starting");
 
   requestQueue = xQueueCreate(1, sizeof(MarketRequest));
@@ -229,6 +247,7 @@ void setup() {
 
 void loop() {
   M5.update();
+  updateBatteryDisplay();
   handleSymbolButtons();
   wifiController.update();
   updateWifiDisplay();

@@ -8,8 +8,9 @@ description: M5Stack Core2 firmware that displays three configurable stocks with
 ## Features
 
 * Maps the three Core2 buttons to configurable stock symbols
-* Displays the selected symbol's latest hourly close and five-trading-day change
+* Displays the selected symbol's latest available close and five-trading-day change
 * Shows Wi-Fi connection state in the top-center header icon
+* Shows battery percentage, low-battery state, and charging state in the top bar
 * Draws green, red, or gray graph for rising, falling, or flat prices
 * Connects to Wi-Fi from a build-time INI file
 * Uses hourly Alpha Vantage data with premium keys
@@ -63,6 +64,12 @@ selected button requests an immediate refresh. Normal refreshes follow
 Alpha Vantage's 25-request daily quota. Each button fetch counts toward that
 quota. Failed requests retry after one minute.
 
+The top bar shows current battery percentage beside a battery icon. Battery fill
+turns red at 20 percent or below. A yellow lightning symbol appears while the
+battery is charging. Battery state refreshes every 10 seconds. Daily fallback
+labels its graph and percentage as a five-day change because current-day movement
+is unavailable until Alpha Vantage publishes that day's close.
+
 ## Validation
 
 Compile firmware and embedded tests without hardware:
@@ -79,9 +86,9 @@ Run tests on a connected Core2:
 pio test -e m5stack-core2
 ```
 
-Device testing must confirm all three button mappings, Wi-Fi connection, NTP
-synchronization, HTTPS trust, Alpha Vantage entitlement, graph rendering, and
-recovery after network loss.
+Device testing must confirm all three button mappings, Wi-Fi connection, battery
+level and charging state, NTP synchronization, HTTPS trust, Alpha Vantage
+entitlement, graph rendering, and recovery after network loss.
 
 ## Publish To GitHub
 
