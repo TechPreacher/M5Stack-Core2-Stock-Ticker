@@ -26,6 +26,7 @@ static_assert(SymbolCount == 3, "Core2 requires three button symbols");
 
 struct MarketRequest {
   std::size_t symbolIndex = 0;
+  stock::ChartPeriod period = stock::ChartPeriod::Daily;
 };
 
 struct MarketResponse {
@@ -42,6 +43,8 @@ QueueHandle_t resultQueue = nullptr;
 stock::Series currentSeries{};
 std::size_t selectedSymbolIndex = 0;
 std::size_t fetchingSymbolIndex = 0;
+stock::ChartPeriod selectedPeriod = stock::ChartPeriod::Daily;
+stock::ChartPeriod fetchingPeriod = stock::ChartPeriod::Daily;
 bool hasData = false;
 bool settingsReady = false;
 bool fetchInProgress = false;
@@ -65,8 +68,8 @@ void marketTask(void*) {
       continue;
     }
     response.symbolIndex = request.symbolIndex;
-    response.fetch =
-        client.fetch(appSettings.symbols[request.symbolIndex], appSettings.apiKey);
+    response.fetch = client.fetch(appSettings.symbols[request.symbolIndex],
+                    appSettings.apiKey, request.period);
     xQueueOverwrite(resultQueue, &response);
     Serial.printf("Market task stack minimum free: %u bytes\n",
                   static_cast<unsigned>(uxTaskGetStackHighWaterMark(nullptr)));
@@ -78,6 +81,18 @@ void show(const char* status, bool stale = false) {
                   selectedSymbolIndex,
                   wifiController.state() == WifiState::Connected,
                   hasData ? &currentSeries : nullptr, status, stale);
+}
+
+const char* chartPeriodStatus(stock::ChartPeriod period) {
+  switch (period) {
+    case stock::ChartPeriod::Daily:
+      return "Daily chart";
+    case stock::ChartPeriod::Weekly:
+      return "Weekly chart";
+    case stock::ChartPeriod::Monthly:
+      return "Monthly chart";
+  }
+  return "Chart";
 }
 
 bool loadSettingsFromSdCard() {
@@ -142,12 +157,13 @@ void startFetch() {
     return;
   }
 
-  const MarketRequest request{selectedSymbolIndex};
+  const MarketRequest request{selectedSymbolIndex, selectedPeriod};
   if (xQueueOverwrite(requestQueue, &request) != pdPASS) {
     show("Worker unavailable", hasData);
     return;
   }
   fetchingSymbolIndex = selectedSymbolIndex;
+  fetchingPeriod = selectedPeriod;
   fetchInProgress = true;
   lastFetchStartedAt = millis();
   show("Updating", hasData);
@@ -159,8 +175,11 @@ void selectSymbol(std::size_t symbolIndex) {
   }
 
   const bool changed = symbolIndex != selectedSymbolIndex;
+  const stock::ChartPeriod nextPeriod = stock::chartPeriodAfterPress(
+      selectedPeriod, !changed);
   selectedSymbolIndex = symbolIndex;
-  if (changed) {
+  if (changed || nextPeriod != selectedPeriod) {
+    selectedPeriod = nextPeriod;
     currentSeries = {};
     hasData = false;
     fetchIntervalMs = appSettings.refreshIntervalMs;
@@ -170,7 +189,10 @@ void selectSymbol(std::size_t symbolIndex) {
     show(wifiController.state() == WifiState::Connected ? "Syncing clock"
                                                         : "Waiting for Wi-Fi");
   } else if (fetchInProgress) {
-    show(selectedSymbolIndex == fetchingSymbolIndex ? "Updating" : "Queued");
+    show(selectedSymbolIndex == fetchingSymbolIndex &&
+                 selectedPeriod == fetchingPeriod
+             ? "Updating"
+             : "Queued");
   } else {
     startFetch();
   }
@@ -247,7 +269,8 @@ void receiveMarketResult() {
   }
 
   fetchInProgress = false;
-  if (response.symbolIndex != selectedSymbolIndex) {
+  if (response.symbolIndex != selectedSymbolIndex ||
+      response.fetch.period != selectedPeriod) {
     startFetch();
     return;
   }
@@ -258,13 +281,16 @@ void receiveMarketResult() {
     hasData = true;
     if (result.interval == MarketInterval::Daily) {
       fetchIntervalMs = max(appSettings.refreshIntervalMs, FreeTierRefreshIntervalMs);
-      show("5-day change", false);
     } else {
       fetchIntervalMs = appSettings.refreshIntervalMs;
-      show("Hourly", false);
     }
+    show(chartPeriodStatus(result.period), false);
   } else {
-    fetchIntervalMs = min(appSettings.refreshIntervalMs, FailedFetchRetryMs);
+      fetchIntervalMs = result.status == FetchStatus::RateLimited
+            ? max(appSettings.refreshIntervalMs,
+              FreeTierRefreshIntervalMs)
+            : min(appSettings.refreshIntervalMs,
+              FailedFetchRetryMs);
     lastFetchStartedAt = millis();
     show(result.message, hasData);
   }

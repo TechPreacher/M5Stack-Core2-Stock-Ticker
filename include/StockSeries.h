@@ -16,6 +16,7 @@ struct Series {
   std::size_t count = 0;
 };
 
+enum class ChartPeriod { Daily, Weekly, Monthly };
 enum class Trend { Down, Flat, Up };
 
 struct PriceRange {
@@ -24,6 +25,10 @@ struct PriceRange {
 };
 
 bool addPoint(Series& series, const char* timestamp, float close);
+ChartPeriod nextChartPeriod(ChartPeriod period);
+ChartPeriod chartPeriodAfterPress(ChartPeriod currentPeriod,
+                                  bool sameSymbol);
+std::size_t tradingDaysForPeriod(ChartPeriod period);
 void sortAndKeepLatestTradingDays(Series& series, std::size_t tradingDays);
 Trend calculateTrend(const Series& series);
 float calculatePercentageChange(const Series& series);

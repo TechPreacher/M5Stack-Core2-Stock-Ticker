@@ -24,6 +24,38 @@ bool addPoint(Series& series, const char* timestamp, float close) {
   return true;
 }
 
+ChartPeriod nextChartPeriod(ChartPeriod period) {
+  switch (period) {
+    case ChartPeriod::Daily:
+      return ChartPeriod::Weekly;
+    case ChartPeriod::Weekly:
+      return ChartPeriod::Monthly;
+    case ChartPeriod::Monthly:
+      return ChartPeriod::Daily;
+  }
+  return ChartPeriod::Daily;
+}
+
+ChartPeriod chartPeriodAfterPress(ChartPeriod currentPeriod,
+                                  bool sameSymbol) {
+  if (!sameSymbol) {
+    return ChartPeriod::Daily;
+  }
+  return nextChartPeriod(currentPeriod);
+}
+
+std::size_t tradingDaysForPeriod(ChartPeriod period) {
+  switch (period) {
+    case ChartPeriod::Daily:
+      return 1;
+    case ChartPeriod::Weekly:
+      return 5;
+    case ChartPeriod::Monthly:
+      return 22;
+  }
+  return 1;
+}
+
 void sortAndKeepLatestTradingDays(Series& series, std::size_t tradingDays) {
   if (series.count == 0 || tradingDays == 0) {
     series.count = 0;

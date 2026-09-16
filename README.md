@@ -1,6 +1,6 @@
 ---
 title: M5Stack Core2 Stock Ticker
-description: M5Stack Core2 firmware that displays three configurable stocks with five-trading-day graphs
+description: M5Stack Core2 firmware that displays three configurable stocks with daily, weekly, and monthly graphs
 ---
 
 ![M5Stack Core2 displaying the MSFT stock graph](media/app-screenshot.png)
@@ -8,13 +8,14 @@ description: M5Stack Core2 firmware that displays three configurable stocks with
 ## Features
 
 * Maps the three Core2 buttons to configurable stock symbols
-* Displays the selected symbol's latest available close and five-trading-day change
+* Cycles the selected symbol through daily, weekly, and monthly charts
+* Displays the selected symbol's latest available close and chart-period change
 * Shows Wi-Fi connection state in the top-center header icon
 * Shows battery percentage, low-battery state, and charging state in the top bar
 * Draws green, red, or gray graph for rising, falling, or flat prices
 * Loads Wi-Fi, API, and symbol settings from the microSD card at startup
-* Uses hourly Alpha Vantage data with premium keys
-* Falls back to five daily closes when key lacks intraday entitlement
+* Uses hourly Alpha Vantage data for daily and weekly premium charts
+* Uses daily closes for monthly charts and keys without intraday entitlement
 * Keeps last valid graph visible when Wi-Fi or API requests fail
 * Runs HTTPS requests on a background FreeRTOS task to keep display loop responsive
 
@@ -64,17 +65,27 @@ pio run -e m5stack-core2 --target upload
 pio device monitor --baud 115200
 ```
 
-Press any Core2 button to select and fetch its labeled symbol. Pressing the
-selected button requests an immediate refresh. Normal refreshes follow
-`refresh_minutes`. Free daily fallback uses at least 65 minutes to remain below
-Alpha Vantage's 25-request daily quota. Each button fetch counts toward that
-quota. Failed requests retry after one minute.
+Startup shows the first configured symbol's daily chart. Press its button once
+to show the weekly chart, again to show the monthly chart, and again to return
+to the daily chart. Further presses repeat the cycle. Pressing a different
+symbol starts that symbol at its daily chart.
+
+Daily and weekly charts use hourly prices when the API key has intraday access.
+Monthly charts use the latest 22 daily closes. When intraday access is
+unavailable, the daily chart uses the latest two closes and the weekly chart
+uses the latest five closes. The period name appears above the graph.
+
+Normal refreshes follow `refresh_minutes`. Daily data uses at least 65 minutes
+to remain below Alpha Vantage's 25-request daily quota. Each period or symbol
+change triggers a fetch and counts toward that quota. Exhausted quotas show
+`API daily limit` and retry after at least 65 minutes. Other failed requests
+retry after one minute.
 
 The top bar shows current battery percentage beside a battery icon. Battery fill
 turns red at 20 percent or below. A yellow lightning symbol appears while the
 battery is charging. Battery state refreshes every 10 seconds. Daily fallback
-labels its graph and percentage as a five-day change because current-day movement
-is unavailable until Alpha Vantage publishes that day's close.
+charts use close-to-close movement because current-day intraday prices are not
+available.
 
 ## Validation
 
@@ -92,9 +103,10 @@ Run tests on a connected Core2:
 pio test -e m5stack-core2
 ```
 
-Device testing must confirm all three button mappings, Wi-Fi connection, battery
-level and charging state, NTP synchronization, HTTPS trust, Alpha Vantage
-entitlement, graph rendering, and recovery after network loss.
+Device testing must confirm all three button mappings, daily-weekly-monthly
+cycling, Wi-Fi connection, battery level and charging state, NTP
+synchronization, HTTPS trust, Alpha Vantage entitlement, graph rendering, and
+recovery after network loss.
 
 ## Publish To GitHub
 
