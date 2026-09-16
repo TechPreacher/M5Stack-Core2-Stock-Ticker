@@ -13,6 +13,11 @@ constexpr int GraphWidth = 292;
 constexpr int GraphHeight = 96;
 constexpr int ButtonBarTop = 218;
 constexpr int ButtonBarHeight = ScreenHeight - ButtonBarTop;
+constexpr int BatteryAreaLeft = 230;
+constexpr int BatteryLeft = 244;
+constexpr int BatteryTop = 8;
+constexpr int BatteryWidth = 20;
+constexpr int BatteryHeight = 12;
 constexpr std::uint16_t Background = 0x0841;
 constexpr std::uint16_t HeaderBackground = 0x18E3;
 constexpr std::uint16_t GridColor = 0x4208;
@@ -35,6 +40,25 @@ bool StockRenderer::begin() {
   return ready_;
 }
 
+void StockRenderer::setBatteryStatus(std::int32_t level, bool charging) {
+  const std::int32_t normalizedLevel =
+      level < 0 ? -1 : std::min<std::int32_t>(level, 100);
+  if (normalizedLevel == batteryLevel_ && charging == batteryCharging_) {
+    return;
+  }
+
+  batteryLevel_ = normalizedLevel;
+  batteryCharging_ = charging;
+  if (!ready_ || !frameRendered_) {
+    return;
+  }
+
+  canvas_.fillRect(BatteryAreaLeft, 0, ScreenWidth - BatteryAreaLeft, 30,
+                   HeaderBackground);
+  drawBatteryStatus();
+  canvas_.pushSprite(0, 0);
+}
+
 void StockRenderer::render(const char* symbol, const char* const* buttonSymbols,
                            std::size_t buttonCount, std::size_t selectedButton,
                            bool wifiConnected, const stock::Series* series,
@@ -44,11 +68,9 @@ void StockRenderer::render(const char* symbol, const char* const* buttonSymbols,
   }
 
   char compactStatus[25]{};
-  char headerStatus[19]{};
   char detailStatus[47]{};
   char headerSymbol[9]{};
   std::snprintf(compactStatus, sizeof(compactStatus), "%.24s", status);
-  std::snprintf(headerStatus, sizeof(headerStatus), "%.18s", status);
   std::snprintf(detailStatus, sizeof(detailStatus), "%.46s", status);
   std::snprintf(headerSymbol, sizeof(headerSymbol), "%.8s", symbol);
 
@@ -59,11 +81,14 @@ void StockRenderer::render(const char* symbol, const char* const* buttonSymbols,
   canvas_.setTextSize(2);
   canvas_.drawString(headerSymbol, 12, 7);
 
-  canvas_.setTextDatum(textdatum_t::top_right);
-  canvas_.setTextSize(1);
-  canvas_.setTextColor(stale ? TFT_ORANGE : TFT_LIGHTGREY);
-  canvas_.drawString(stale ? "STALE" : headerStatus, ScreenWidth - 10, 10);
+  if (stale) {
+    canvas_.setTextDatum(textdatum_t::top_right);
+    canvas_.setTextSize(1);
+    canvas_.setTextColor(TFT_ORANGE);
+    canvas_.drawString("STALE", BatteryAreaLeft - 5, 10);
+  }
   drawWifiStatus(wifiConnected);
+  drawBatteryStatus();
   drawSymbolLabels(buttonSymbols, buttonCount, selectedButton);
 
   if (series == nullptr || series->count == 0) {
@@ -75,6 +100,7 @@ void StockRenderer::render(const char* symbol, const char* const* buttonSymbols,
     canvas_.setTextColor(TFT_LIGHTGREY);
     canvas_.drawString("Waiting for market data", ScreenWidth / 2,
                        ScreenHeight / 2 + 20);
+    frameRendered_ = true;
     canvas_.pushSprite(0, 0);
     return;
   }
@@ -118,7 +144,44 @@ void StockRenderer::render(const char* symbol, const char* const* buttonSymbols,
   canvas_.drawString(firstDate, GraphLeft, ButtonBarTop - 3);
   canvas_.setTextDatum(textdatum_t::bottom_right);
   canvas_.drawString(lastDate, GraphLeft + GraphWidth, ButtonBarTop - 3);
+  frameRendered_ = true;
   canvas_.pushSprite(0, 0);
+}
+
+void StockRenderer::drawBatteryStatus() {
+  const std::uint16_t outlineColor = batteryCharging_ ? TFT_YELLOW : TFT_LIGHTGREY;
+  canvas_.drawRect(BatteryLeft, BatteryTop, BatteryWidth, BatteryHeight, outlineColor);
+  canvas_.fillRect(BatteryLeft + BatteryWidth, BatteryTop + 3, 3,
+                   BatteryHeight - 6, outlineColor);
+
+  if (batteryLevel_ >= 0) {
+    const int fillWidth = static_cast<int>(
+        (batteryLevel_ * (BatteryWidth - 4)) / 100);
+    const std::uint16_t fillColor = batteryLevel_ <= 20 ? TFT_RED : TFT_GREEN;
+    if (fillWidth > 0) {
+      canvas_.fillRect(BatteryLeft + 2, BatteryTop + 2, fillWidth,
+                       BatteryHeight - 4, fillColor);
+    }
+  }
+
+  if (batteryCharging_) {
+    canvas_.drawLine(BatteryLeft - 7, BatteryTop + 1, BatteryLeft - 10,
+                     BatteryTop + 7, TFT_YELLOW);
+    canvas_.drawLine(BatteryLeft - 10, BatteryTop + 7, BatteryLeft - 6,
+                     BatteryTop + 7, TFT_YELLOW);
+    canvas_.drawLine(BatteryLeft - 6, BatteryTop + 7, BatteryLeft - 9,
+                     BatteryTop + BatteryHeight, TFT_YELLOW);
+  }
+
+  char levelText[6]{"--%"};
+  if (batteryLevel_ >= 0) {
+    std::snprintf(levelText, sizeof(levelText), "%ld%%",
+                  static_cast<long>(batteryLevel_));
+  }
+  canvas_.setTextDatum(textdatum_t::top_right);
+  canvas_.setTextSize(1);
+  canvas_.setTextColor(outlineColor);
+  canvas_.drawString(levelText, ScreenWidth - 8, 10);
 }
 
 void StockRenderer::drawWifiStatus(bool connected) {

@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstring>
 
+#include "AppSettings.h"
 #include "MarketDataClient.h"
 #include "StockSeries.h"
 
@@ -80,6 +81,48 @@ void test_given_malformed_payload_when_parsed_then_returns_parse_error() {
   TEST_ASSERT_EQUAL(FetchStatus::ParseError, result.status);
 }
 
+void test_given_valid_ini_when_parsed_then_loads_settings() {
+  constexpr char input[] =
+      "[wifi]\nssid = Test Network\npassword = secret\n\n"
+      "[market]\napi_key = demo\nsymbol_a = msft\nsymbol_b = AAPL\n"
+      "symbol_c = brk-b\nrefresh_minutes = 45\n";
+  AppSettings settings{};
+
+  const SettingsParseResult result =
+      parseAppSettings(input, sizeof(input) - 1, settings);
+
+  TEST_ASSERT_EQUAL(SettingsParseStatus::Success, result.status);
+  TEST_ASSERT_EQUAL_STRING("Test Network", settings.wifiSsid);
+  TEST_ASSERT_EQUAL_STRING("MSFT", settings.symbols[0]);
+  TEST_ASSERT_EQUAL_STRING("BRK-B", settings.symbols[2]);
+  TEST_ASSERT_EQUAL_UINT32(45UL * 60UL * 1000UL, settings.refreshIntervalMs);
+}
+
+void test_given_missing_ini_key_when_parsed_then_returns_error() {
+  constexpr char input[] = "[wifi]\nssid = Test Network\n";
+  AppSettings settings{};
+
+  const SettingsParseResult result =
+      parseAppSettings(input, sizeof(input) - 1, settings);
+
+  TEST_ASSERT_EQUAL(SettingsParseStatus::Invalid, result.status);
+  TEST_ASSERT_EQUAL_STRING("settings.ini incomplete", result.message);
+}
+
+void test_given_invalid_symbol_when_parsed_then_returns_error() {
+  constexpr char input[] =
+      "[wifi]\nssid=x\npassword=y\n[market]\napi_key=z\n"
+      "symbol_a=BAD SYMBOL\nsymbol_b=AAPL\nsymbol_c=GOOGL\n"
+      "refresh_minutes=30\n";
+  AppSettings settings{};
+
+  const SettingsParseResult result =
+      parseAppSettings(input, sizeof(input) - 1, settings);
+
+  TEST_ASSERT_EQUAL(SettingsParseStatus::Invalid, result.status);
+  TEST_ASSERT_EQUAL_STRING("Invalid stock symbol", result.message);
+}
+
 void setup() {
   UNITY_BEGIN();
   RUN_TEST(test_given_six_trading_days_when_normalized_then_keeps_latest_five);
@@ -88,6 +131,9 @@ void setup() {
   RUN_TEST(test_given_api_error_when_parsed_then_returns_api_error);
   RUN_TEST(test_given_daily_payload_when_parsed_then_accepts_date_timestamps);
   RUN_TEST(test_given_malformed_payload_when_parsed_then_returns_parse_error);
+  RUN_TEST(test_given_valid_ini_when_parsed_then_loads_settings);
+  RUN_TEST(test_given_missing_ini_key_when_parsed_then_returns_error);
+  RUN_TEST(test_given_invalid_symbol_when_parsed_then_returns_error);
   UNITY_END();
 }
 
