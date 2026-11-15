@@ -28,7 +28,13 @@ constexpr std::uint16_t FlatColor = TFT_LIGHTGREY;
 StockRenderer::StockRenderer() : canvas_(&M5.Display) {}
 
 bool StockRenderer::begin() {
-  M5.Display.setRotation(1);
+  // Landscape, whatever number the library gives it: M5GFX 0.2 calls the Core2's landscape
+  // rotation 1, M5GFX 0.3 calls it 0, and a fixed 1 then shows the picture turned by 90
+  // degrees and cut off. M5.begin() already set the board's default; only a portrait result
+  // is corrected.
+  if (M5.Display.width() < M5.Display.height()) {
+    M5.Display.setRotation(M5.Display.getRotation() ^ 1);
+  }
   M5.Display.setBrightness(160);
   canvas_.setColorDepth(16);
   ready_ = canvas_.createSprite(ScreenWidth, ScreenHeight) != nullptr;
